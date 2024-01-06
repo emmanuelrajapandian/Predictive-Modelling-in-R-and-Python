@@ -1,0 +1,146 @@
+---
+title: "Advanced Predictive Models"
+date: ""
+output:
+  pdf_document: default
+  html_document: default
+editor_options:
+  chunk_output_type: viewer
+---
+
+<style>
+body {
+text-align: justify}
+</style>
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(mvtnorm)
+library(ggplot2)
+```
+\
+**Part-A:**
+\
+Generate 5,000 independent realizations of X and use ggplot to create a scatter plot of your simulated values of X over the provided tennis court plot.
+\
+\
+**Answer**
+\
+```{r, warning=FALSE, fig.align='center'}
+mean_vec <- c(29, 16)
+cov_matrix <- matrix(c(4, 4, 4, 16), nrow = 2)
+
+# Generate 5,000 independent realizations of X
+set.seed(42)
+X <- MASS::mvrnorm(n = 5000, mu = mean_vec, Sigma = cov_matrix)
+
+# Create a data frame for the scatter plot
+data <- data.frame(X1 = X[, 1], X2 = X[, 2])
+
+# Load the tennis court plot function
+tennisCourt = data.frame(x1 = c(0,4.5,18,31.5,36,0,4.5,4.5,0,-2),
+                         x2 = c(0,4.5,18,31.5,36,36,31.5,31.5,36,38),
+                         y1 = c(-39,-39,-21,-39,-39,39,21,-21,-39,0), 
+                         y2 = c(39,39,21,39,39,39,21,-21,-39,0),
+                         width = c(rep(1,9),3))
+
+# Creating the scatter plot on the tennis court
+ggplot() +
+  geom_segment(data = tennisCourt,
+               aes(
+                 x = x1,
+                 y = y1,
+                 xend = x2,
+                 yend = y2,
+                 width = tennisCourt$width
+               )) +
+  geom_point(
+    data = data,
+    aes(x = X1, y = X2),
+    color = "blue",
+    alpha = 0.5
+  ) +
+  labs(x = "Lateral Location (X1)", y = "Depth Location (X2)", 
+       title = "Tennis Player's Serve Locations")
+```
+\
+**Part-B:**
+\
+Using the model, what is the theoretical probability a serve from the player will be legal?  Additionally, show how you can approximate this probability from the realizations of X and provide the numeric value of your approximation.
+\
+\
+**Answer**
+\
+```{r}
+prob_theoretical <- pnorm(31.5, mean = mean_vec[1], sd = sqrt(cov_matrix[1, 1])) -
+                    pnorm(18, mean = mean_vec[1], sd = sqrt(cov_matrix[1, 1]))
+
+# Approximate probability
+prob_approx <- sum(data$X1 >= 18 & data$X1 <= 31.5 & data$X2 >= 0 & data$X2 <= 21)/nrow(data)
+cat("Theoretical probability:", prob_theoretical)
+cat("Approximated probability:", prob_approx)
+```
+\newpage
+**Part-C:**
+\
+Say the player decides to evaluate their serves that land further to the right (positive X1 direction). Given that the player examines their serves landing around X1=30.5, what is the conditional distribution of X2? What is the probability that these serves are legal (only considering depth, not width)? (Hint: Consider using the pnorm function)
+\
+\
+**Answer**
+\
+```{r}
+# Conditional mean and variance of X2 given X1 = 30.5
+conditional_mean <- mean_vec[2] + cov_matrix[2, 1] / cov_matrix[1, 1] * (30.5 - mean_vec[1])
+conditional_variance <- cov_matrix[2, 2] - cov_matrix[2, 1] / cov_matrix[1, 1] * cov_matrix[1, 2]
+
+prob_legal <- pnorm(21, mean = conditional_mean, sd = sqrt(conditional_variance)) -
+              pnorm(0, mean = conditional_mean, sd = sqrt(conditional_variance))
+
+cat("Probability that the serves are legal:", prob_legal)
+```
+\
+**Part-D:**
+\
+Generate 500 realizations of X2 from the conditional distribution found in part c. Create a new version of the scatterplot constructed for part a that includes plots of the 500 realizations of X2 plotted as different color points with X1 fixed at 30.5. Add a small amount of random noise to the X1 component to reduce the effects of overplotting (consider using R's jitter function). Describe your results. How do your values of X2 generated from the conditional distribution compare to the values generated directly from the original distribution?
+\
+\
+**Answer**
+\
+```{r, warning=FALSE, fig.align='center'}
+set.seed(42)
+# Generate 500 realizations of X2
+X2_conditional <- rnorm(n = 500, mean = conditional_mean, 
+                        sd = sqrt(conditional_variance))
+
+# Adding jitter
+X1_jittered <- jitter(rep(30.5, 500), factor = 0.1)
+data_conditional <- data.frame(X1 = X1_jittered, X2 = X2_conditional)
+
+# Create a scatterplot on the tennis court with the new data
+ggplot() +
+  geom_segment(data = tennisCourt,
+               aes(
+                 x = x1,
+                 y = y1,
+                 xend = x2,
+                 yend = y2,
+                 width = tennisCourt$width
+               )) +
+  geom_point(
+    data = data,
+    aes(x = X1, y = X2),
+    color = "blue",
+    alpha = 0.5
+  ) +
+  geom_point(data = data_conditional,
+             aes(x = X1, y = X2),
+             color = "red",
+             alpha = 0.5) +
+  labs(x = "Lateral Location (X1)", y = "Depth Location (X2)", 
+       title = "Tennis Player's Serve Locations with Jittered Data")
+```
+\
+The values of X2 generated from the conditional distribution provide a specific range of depth locations for serves with X1 approximately equal to 30.5. These values allow us to analyze the probability of serves being legal within that specific subset of the serve locations. 
+\
+\
+By narrowing down the X1 values to a specific range, we can examine the depth component more accurately and make precise evaluations regarding the legality of serves.

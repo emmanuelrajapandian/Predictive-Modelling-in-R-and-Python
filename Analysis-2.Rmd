@@ -1,0 +1,468 @@
+---
+title: "APM Staff Graded Homework Week-2"
+output:
+  pdf_document: default
+  html_document: default
+---
+\
+**Part - A:**
+\
+\
+To determine the appropriate value for the seasonal lag term, S, in a SARIMA model, we need to consider the seasonal pattern in the data. In this case, we have monthly temperature data from January 2000 to December 2001 for Dallas, TX.
+\
+Looking at the data, we can observe a clear seasonal pattern with temperatures fluctuating throughout the year. The data exhibits a yearly cycle where temperatures rise during the summer months and fall during the winter months. **Therefore, the most appropriate value for the seasonal lag term, S, would be 12**.
+\
+Since the data is recorded monthly, a value of 12 corresponds to the annual seasonal cycle. Using S = 12 allows the SARIMA model to capture the yearly seasonality and make accurate predictions based on the pattern observed in the data.
+\
+\
+**Part - B**:
+\
+```{r, warning= FALSE, message= FALSE, fig.align= 'center'}
+# Load the required libraries
+library(forecast)
+
+data <- read.csv("MeanDallasTemps.csv")
+
+# Convert the data to a time series object
+ts_data <- ts(data$AvgTemp, start = c(2000, 1), frequency = 12)
+
+# Initialize variables for best model selection
+best_model <- NULL
+best_aicc <- Inf
+
+# Iterate over all combinations of parameters
+for (p in 0:1) {
+  for (d in 0:1) {
+    for (q in 0:1) {
+      for (P in 0:1) {
+        for (D in 0:1) {
+          for (Q in 0:1) {
+            # Skip the four cases where P = 1, D = 0, Q = 1, and d = 0
+            if (!(P == 1 & D == 0 & Q == 1 & d == 0)) {
+              # Fit the SARIMA model
+              model <- Arima(ts_data, order = c(p, d, q), 
+                             seasonal = list(order = c(P, D, Q), period = 12), 
+                             include.mean = FALSE)
+              
+              # Calculate AICc value
+              aicc <- model$aicc
+              
+              # Check if current model has lower AICc value
+              if (aicc < best_aicc) {
+                best_aicc <- aicc
+                best_model <- model
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+# Print the best model summary
+summary(best_model)
+```
+\
+From the above best model results, the estimated coefficients for the ARIMA(1,0,1)(0,1,1) model are as follows:
+\
+\
+AR coefficient ($\phi$): The coefficient for the autoregressive term (AR1) is given as 0.7183.
+\
+MA coefficient ($\theta$): The coefficient for the moving average term (MA1) is given as -0.4535.
+\
+$\sigma$^2: This is the estimated variance of the error term, denoted as $\sigma$^2. The value is 10.29.
+\
+The AICc value is given as: 1282.26
+\
+\newpage
+**Part - C:**
+\
+```{r, eval=FALSE}
+# load library
+library(ggplot2)
+library(gridExtra)
+library(tidyverse)
+library(astsa)
+library(xts)
+library(lubridate)
+
+# Set constants
+n <- 252 #length of time series
+# n_train <- 150 #number of obs. for model fitting
+p <- 1
+d <- 0
+q <- 1
+P <- 0
+D <- 1
+Q <- 1
+S < 12
+
+data <- read.csv("MeanDallasTemps.csv")
+
+# Extract the time series from column B
+x <- ts(data$AvgTemp)
+x_pred <- vector("list", length = 192)
+x_pred[] <- 0
+x_se <- vector("list", length = 192)
+x_se[] <- 0
+
+# Set the training window
+for (i in 1:72){
+  
+  final <- 180 + i
+  x_train <- window(x,
+                    start = 1,
+                    end = final)
+  
+  fit_train <- sarima(x_train,
+                      p = p, 
+                      d = d, 
+                      q = q, 
+                      P = P,
+                      D = D,
+                      Q = Q,
+                      S = S,
+                      no.constant = TRUE,
+                      details = FALSE)
+  
+  fit_for <- sarima.for(x_train, 
+                        n.ahead = 12, 
+                        p = p, 
+                        d = d, 
+                        q = q, 
+                        P = P,
+                        D = D,
+                        Q = Q,
+                        S = S,
+                        plot = F)
+  if (i <=60){
+    x_pred <- append(x_pred, fit_for$pred[12])
+    x_se <- append(x_se, fit_for$se[12])
+  }
+}
+
+data$predicted_values <- x_pred
+data$pred_se <- x_se
+data$predicted_values <- as.numeric(unlist(data$predicted_values))
+data$pred_se <- as.numeric(unlist(data$pred_se))
+
+
+# Plot data and forecasts
+# Subset the data from January 2010 to December 2020
+data$Month <- as.Date(data$Month)
+observed_data <-
+  subset(data,
+         Month >= as.Date("2010-01-01") & Month <= as.Date("2020-12-31"))
+predicted_data <- subset(data, Month >= as.Date("2016-01-01"))
+
+# Create the plot
+ggplot(subset_data, aes(x = Month)) +
+  geom_line(data = observed_data,
+            aes(x = Month,
+                y = AvgTemp,
+                color = "Observed"),
+            size = 1) +
+  geom_line(
+    data = predicted_data,
+    aes(x = Month,
+        y = predicted_values,
+        color = "Predicted"),
+    size = 1
+  ) +
+  geom_ribbon(
+    aes(ymin = predicted_values - 1.96 * pred_se, 
+        ymax = predicted_values + 1.96 *
+          pred_se),
+    alpha = 0.2,
+    fill = "blue"
+  ) +
+  labs(x = "Date", y = "Average Temperature", 
+       title = "Predicted Average Temperature with Confidence Bands") +
+  scale_color_manual(values = c("Observed" = "black", "Predicted" = "red"))
+
+
+january_2018 <-
+  subset(predicted_data, format(Month, "%Y-%m") == "2018-01")
+
+# Retrieve the one-year-in-advance prediction for January 2018
+one_year_ahead_prediction <- january_2018$predicted_values
+
+# Retrieve the upper and lower bounds of the prediction interval
+upper_bound <-
+  january_2018$predicted_value + (1.96 * january_2018$pred_se)
+lower_bound <-
+  january_2018$predicted_value - (1.96 * january_2018$pred_se)
+
+# Print the results
+cat(
+  "The one year ahead prediction of AvgTemp for January 2018:",
+  january_2018$predicted_values,
+  "\n"
+)
+cat("Upper bound of the 95% confidence interval:", upper_bound, "\n")
+cat("Lower bound of the 95% confidence interval:", lower_bound, "\n")
+```
+
+```{r, fig.align='center', echo=FALSE}
+knitr::include_graphics("plot_q3c.png")
+```
+\
+```{r, fig.align='center', echo=FALSE}
+knitr::include_graphics("data_q3c.png")
+```
+\newpage
+**Part - D:**
+\
+```{r, warning=FALSE, message=FALSE}
+library(ggplot2)
+library(gridExtra)
+library(tidyverse)
+library(astsa)
+library(xts)
+library(lubridate)
+
+# Set constants
+n <- 252 #length of time series
+# n_train <- 150 #number of obs. for model fitting
+p <- 3
+d <- 1
+q <- 1
+k <- 3
+
+data <- read.csv("MeanDallasTemps.csv")
+
+# Extract the time series from column B
+x <- ts(data$AvgTemp)
+x_pred <- vector("list", length = 192)
+x_pred[] <- 0
+x_se <- vector("list", length = 192)
+x_se[] <- 0
+
+model <- arima(x, order = c(3,1,1))
+aic <- model$aic
+AICc <- aic - (n+2*k)/(n) + (n+k)/(n-k-2)
+
+cat("The AICc Value for an ARIMA(3,1,1) fit to the entire aMDT data  is:", 
+    AICc, "\n")
+```
+\
+\
+```{r, eval=FALSE}
+# Set the training window
+for (i in 1:72){
+  
+  final <- 180 + i
+  x_train <- window(x,
+                    start = 1,
+                    end = final)
+  
+  fit_for <- sarima.for(x_train, 
+                        n.ahead = 12, 
+                        p = p, 
+                        d = d, 
+                        q = q, 
+                        plot = F)
+  if (i <=60){
+    x_pred <- append(x_pred, fit_for$pred[12])
+    x_se <- append(x_se, fit_for$se[12])
+  }
+}
+
+data$predicted_values <- x_pred
+data$pred_se <- x_se
+data$predicted_values <- as.numeric(unlist(data$predicted_values))
+data$pred_se <- as.numeric(unlist(data$pred_se))
+
+
+# Plot data and forecasts
+# Subset the data from January 2010 to December 2020
+data$Month <- as.Date(data$Month)
+observed_data <-
+  subset(data,
+         Month >= as.Date("2010-01-01") & Month <= as.Date("2020-12-31"))
+predicted_data <- subset(data, Month >= as.Date("2016-01-01"))
+
+# Create the plot
+ggplot(subset_data, aes(x = Month)) +
+  geom_line(data = observed_data,
+            aes(x = Month, y = AvgTemp, color = "Observed"),
+            size = 1) +
+  geom_line(
+    data = predicted_data,
+    aes(x = Month, y = predicted_values, color = "Predicted"),
+    size = 1
+  ) +
+  geom_ribbon(
+    aes(ymin = predicted_values - 1.96 * pred_se, 
+        ymax = predicted_values + 1.96 *
+          pred_se),
+    alpha = 0.2,
+    fill = "blue"
+  ) +
+  labs(x = "Date", y = "Average Temperature", 
+       title = "Predicted Average Temperature with Confidence Bands") +
+  scale_color_manual(values = c("Observed" = "black", "Predicted" = "red"))
+
+
+january_2018 <-
+  subset(predicted_data, format(Month, "%Y-%m") == "2018-01")
+
+# Retrieve the one-year-in-advance prediction for January 2018
+one_year_ahead_prediction <- january_2018$predicted_values
+
+# Retrieve the upper and lower bounds of the prediction interval
+upper_bound <-
+  january_2018$predicted_value + (1.96 * january_2018$pred_se)
+lower_bound <-
+  january_2018$predicted_value - (1.96 * january_2018$pred_se)
+
+# Print the results
+cat(
+  "The one year ahead prediction of AvgTemp for January 2018:",
+  january_2018$predicted_values,
+  "\n"
+)
+cat("Upper bound of the 95% confidence interval:", upper_bound, "\n")
+cat("Lower bound of the 95% confidence interval:", lower_bound, "\n")
+```
+\
+```{r, fig.align='center', echo=FALSE}
+knitr::include_graphics("plot_q3d.png")
+```
+\
+```{r, fig.align='center', echo=FALSE}
+knitr::include_graphics("data_q3d.png")
+```
+\
+The ARIMA fitted model does not produce predictions that capture seasonal behavior. The model predictions from part C were quite close to the actual aMDT data and the trend lines were almost similar.
+\
+In this plot of part D however, the seasonal behavior is not captured as good as when the seasonal component was mentioned in the `sarima()` model. The confidence interval is too wide and that can be noticed in the output of the January 2018 prediction.
+\
+\newpage
+**Part - E:**
+\
+```{r, warning=FALSE, message=FALSE}
+library(ggplot2)
+library(gridExtra)
+library(tidyverse)
+library(astsa)
+library(xts)
+library(lubridate)
+
+# Set constants
+n <- 252 #length of time series
+# n_train <- 150 #number of obs. for model fitting
+p <- 12
+d <- 1
+q <- 0
+k <- 3
+
+data <- read.csv("MeanDallasTemps.csv")
+
+# Extract the time series from column B
+x <- ts(data$AvgTemp)
+x_pred <- vector("list", length = 192)
+x_pred[] <- 0
+x_se <- vector("list", length = 192)
+x_se[] <- 0
+
+model <- arima(x, order = c(12,1,1))
+aic <- model$aic
+AICc1 <- aic - (n+2*k)/(n) + (n+k)/(n-k-2)
+
+cat("The AICc Value for an ARIMA(12,1,0) fit to the entire aMDT data  is:", 
+    AICc1, "\n")
+```
+\
+\
+```{r, eval=FALSE}
+# Set the training window
+for (i in 1:72){
+  
+  final <- 180 + i
+  x_train <- window(x,
+                    start = 1,
+                    end = final)
+  
+  fit_for <- sarima.for(x_train, 
+                        n.ahead = 12, 
+                        p = p, 
+                        d = d, 
+                        q = q, 
+                        plot = F)
+  if (i <=60){
+    x_pred <- append(x_pred, fit_for$pred[12])
+    x_se <- append(x_se, fit_for$se[12])
+  }
+}
+
+data$predicted_values <- x_pred
+data$pred_se <- x_se
+data$predicted_values <- as.numeric(unlist(data$predicted_values))
+data$pred_se <- as.numeric(unlist(data$pred_se))
+
+
+# Plot data and forecasts
+# Subset the data from January 2010 to December 2020
+data$Month <- as.Date(data$Month)
+observed_data <- subset(data, 
+                        Month >= as.Date("2010-01-01") 
+                        & Month <= as.Date("2020-12-31"))
+predicted_data <- subset(data, Month >= as.Date("2016-01-01"))
+
+# Create the plot
+ggplot(subset_data, aes(x = Month)) +
+  geom_line(data = observed_data,
+            aes(x = Month, y = AvgTemp, color = "Observed"),
+            size = 1) +
+  geom_line(
+    data = predicted_data,
+    aes(x = Month, y = predicted_values, color = "Predicted"),
+    size = 1
+  ) +
+  geom_ribbon(
+    aes(ymin = predicted_values - 1.96 * pred_se, 
+        ymax = predicted_values + 1.96 *
+          pred_se),
+    alpha = 0.2,
+    fill = "blue"
+  ) +
+  labs(x = "Date", y = "Average Temperature", 
+       title = "Predicted Average Temperature with Confidence Bands") +
+  scale_color_manual(values = c("Observed" = "black", "Predicted" = "red"))
+
+
+january_2018 <-
+  subset(predicted_data, format(Month, "%Y-%m") == "2018-01")
+
+# Retrieve the one-year-in-advance prediction for January 2018
+one_year_ahead_prediction <- january_2018$predicted_values
+
+# Retrieve the upper and lower bounds of the prediction interval
+upper_bound <-
+  january_2018$predicted_value + (1.96 * january_2018$pred_se)
+lower_bound <-
+  january_2018$predicted_value - (1.96 * january_2018$pred_se)
+
+# Print the results
+cat(
+  "The one year ahead prediction of AvgTemp for January 2018:",
+  january_2018$predicted_values,
+  "\n"
+)
+cat("Upper bound of the 95% confidence interval:", upper_bound, "\n")
+cat("Lower bound of the 95% confidence interval:", lower_bound, "\n")
+```
+\
+```{r, fig.align='center', echo=FALSE}
+knitr::include_graphics("plot_q3e.png")
+```
+\
+```{r, fig.align='center', echo=FALSE}
+knitr::include_graphics("data_q3e.png")
+```
+\
+This ARIMA(12,1,0) model seems to have close values between the prediction and the actual aMDT. This plot in part E is very comparable to the plot in Part C and the predicted values and CI seems to be also similar to part C.
+\
+When the AR component is set as 12, it seems to capture the seasonal behavior of the data as compared to the ARIMA(3,1,1) model.

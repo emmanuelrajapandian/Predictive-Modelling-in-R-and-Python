@@ -1,0 +1,102 @@
+---
+title: "APM Staff Graded Homework Week - 4"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(ggmap)
+library(maptools)
+library(sp)
+library(leaflet)
+library(leaflet.providers)
+library(leaflet.extras)
+library(maps)
+library(osmdata)
+library(sf)
+library(spatstat)
+library(tidyverse)
+```
+
+```{r, fig.align='center', message=FALSE, warning=FALSE}
+data <- read.csv('chi_markets.csv')
+lon <- data$lon
+lat <- data$lat
+
+mad_map <- get_map(getbb("Chicago"), source="stamen", zoom=12)
+
+ggmap(mad_map) +
+  geom_point(data = data, aes(x = lon, y = lat), color = "red", size = 3) +
+  labs(title = "Supermarket Locations in Chicago")
+```
+\
+Two maps but using different packages and approaches. The below plot is interactive.
+\
+```{r, fig.align='center', message=FALSE, warning=FALSE}
+data <- read.csv("chi_markets.csv")
+map <- leaflet() %>%
+  setView(lng = -87.6298, lat = 41.8781, zoom = 11) %>%
+  addProviderTiles("OpenStreetMap")
+
+map <- map %>%
+  addMarkers(data = data, lng = ~lon, lat = ~lat)
+
+map
+```
+\
+```{r, fig.align='center', echo=FALSE}
+knitr::include_graphics("hw4_q1.png")
+```
+\
+Therefore by drawing a rectangle (smallest) encapsulating all the points, there are no points in the top right corner of the said rectangle because that region is a waterbody and can not consist of any building.
+\
+\
+**Part - B:**
+\
+```{r, fig.align='center', message=FALSE, warning=FALSE}
+load("chi_supermarkets_ppp.Rdata")
+
+bb <- boundingbox(markets_ppp)
+
+plot(markets_ppp, main = "Spatial Pattern of Market Points", xlim = bb$xrange, ylim = bb$yrange)
+box()
+```
+\
+Clustering: Clustering refers to the tendency of points to be closer to each other than would be expected by random chance. In the context of the supermarket data, clustering might manifest as supermarkets being concentrated in specific areas or neighborhoods of the city rather than being randomly distributed across the entire Chicago bounding box. This could indicate that certain regions have a higher demand for supermarkets, leading to their clustering in those areas.
+\
+\
+Intensity Variation: Intensity variation refers to the non-uniform distribution of points across space, characterized by varying intensities. In the case of the supermarket data, intensity variation could imply that certain parts of the city have a higher density of supermarkets compared to others. This could be driven by factors such as population density, consumer demand, or zoning regulations. Areas with higher population densities or greater commercial activity might exhibit higher intensities of supermarkets, while less densely populated or more residential areas might have lower intensities.
+\
+\
+Both clustering and intensity variation are important aspects of spatial pattern analysis in SPP. Identifying these features can help in understanding the underlying factors influencing the distribution of supermarkets in the city of Chicago.
+\
+\
+**Part - C:**
+\
+```{r, fig.align='center', message=FALSE, warning=FALSE}
+# Fit the inhomogeneous Poisson process model
+model <- ppm(markets_ppp, ~ polynom(x, y, degree = 2))
+
+# plot(markets_ppp, main = "Supermarket Point Pattern with Estimated Intensity Function")
+plot(model,
+     how = "image", 
+     se = FALSE, 
+     main = "Supermarket Point Pattern with Estimated Intensity Function")
+```
+
+```{r, fig.align='center', message=FALSE, warning=FALSE}
+
+intercept <- coef(model)["(Intercept)"]
+intercept <- round(intercept, 4)
+
+point <- data.frame(x = 443674, y = 4636999)
+# Calculate the intensity value at the specified point
+pred_logintensity <- predict(model, locations=point)
+
+cat("Actual Intercept of Estimated (log) Intensity Function without rounding off:", intercept, "\n")
+cat("Intercept of Estimated (log) Intensity Function:", signif(intercept,4), "\n")
+cat("Intensity Function at (x = 443674, y = 4636999):", signif(pred_logintensity,4), "\n")
+
+```
